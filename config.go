@@ -1,4 +1,4 @@
-package bouncer
+package main
 
 import (
 	"log"

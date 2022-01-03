@@ -1,4 +1,4 @@
-package bouncer
+package main
 
 import (
 	"os"
@@ -35,6 +35,10 @@ func setupRouter() *gin.Engine {
 
 	// Web framework
 	router := gin.New()
+
+	// TODO set proxy rules https://pkg.go.dev/github.com/gin-gonic/gin#readme-don-t-trust-all-proxies
+	// router.SetTrustedProxies([]string{"192.168.1.2"})
+
 	router.Use(logger.SetLogger(
 		logger.WithSkipPath([]string{"/api/v1/ping", "/api/v1/healthz"}),
 	))

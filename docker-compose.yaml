@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: "traefik:v2.5"
+    container_name: "traefik-waf"
+    command:
+#      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    network_mode: host
+
+  whoami:
+    image: traefik/whoami
+    container_name: "simple-service-waf"
+    labels:
+      # Create bouncer middleware
+      - "traefik.http.middlewares.crowdsec-bouncer.forwardauth.address=http://127.0.0.1:8081/api/v1/forwardAuth"
+      - "traefik.http.middlewares.crowdsec-bouncer.forwardauth.trustForwardHeader=true"
+
+      # Traefik routing to this service
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoami.rule=Host(`localhost`, `192.168.1.80`)"
+      - "traefik.http.routers.whoami.entrypoints=web"
+      - "traefik.http.routers.whoami.middlewares=crowdsec-bouncer@docker"

@@ -1,4 +1,4 @@
-package bouncer
+package main
 
 import (
 	"github.com/gin-gonic/gin"
@@ -7,11 +7,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"net/http"
+	"strconv"
 )
 
 const (
-	clientIpHeader = "X-Real-Ip"
-	healthCheckIp  = "127.0.0.1"
+	serverHostHeader = "X-Forwarded-Host"
+	clientIpHeader   = "X-Real-Ip" // or X-Forwarded-For
+	clientPortHeader = "X-Forwarded-Port"
+
+	healthClientIp   = "192.168.1.1"
+	healthClientPort = 12345
+	healthServerIp   = "10.42.1.1"
+	healthServerPort = 8080
 )
 
 var (
@@ -21,29 +28,33 @@ var (
 	})
 )
 
-/**
-Call Coraza WAF
-*/
-func isRequestAuthorized(c *gin.Context, realIP string) (bool, error) {
-	// TODO Coraza
-	// Authorization logic
-	return true, nil
-}
-
 /*
 	Main route used by Traefik to verify authorization for a request
 */
 func ForwardAuth(c *gin.Context) {
 	requestProcessed.Inc()
-	// Getting and verifying ip from header
-	realIP := c.Request.Header.Get(clientIpHeader)
 
-	isAuthorized, err := isRequestAuthorized(c, realIP)
+	// Parsing int
+	serverPort, err := strconv.Atoi(c.Request.Header.Get(clientPortHeader))
 	if err != nil {
-		log.Warn().Err(err).Msgf("An error occurred while checking request %q", realIP)
+		log.Warn().Err(err).Msg("Can't convert server port to int")
 		c.String(http.StatusForbidden, "Forbidden")
-	} else if !isAuthorized {
-		c.String(http.StatusForbidden, "Forbidden")
+	}
+
+	request := CorazaRequestProperties{
+		ClientIp:   c.Request.Header.Get(clientIpHeader),
+		ClientPort: 5489, // FIXME
+		ServerIp:   c.Request.Header.Get(serverHostHeader),
+		ServerPort: serverPort,
+		Headers:    c.Request.Header.Clone(),
+	}
+	request.Headers.Del(clientIpHeader)
+	request.Headers.Del(clientPortHeader)
+	request.Headers.Del(serverHostHeader)
+
+	interrupt := ProcessRequest(request)
+	if interrupt != nil {
+		c.String(interrupt.Status, "")
 	} else {
 		c.Status(http.StatusOK)
 	}
@@ -53,10 +64,15 @@ func ForwardAuth(c *gin.Context) {
 	Route to check bouncer WAF capability. Mainly use for Kubernetes readiness probe
 */
 func Healthz(c *gin.Context) {
-	isHealthy, err := isRequestAuthorized(c, healthCheckIp)
-	if err != nil || !isHealthy {
-		log.Warn().Err(err).Msg("The health check did not pass...")
-		c.Status(http.StatusForbidden)
+	request := CorazaRequestProperties{
+		ClientIp:   healthClientIp,
+		ClientPort: healthClientPort,
+		ServerIp:   healthServerIp,
+		ServerPort: healthServerPort,
+	}
+	interrupt := ProcessRequest(request)
+	if interrupt != nil {
+		c.String(interrupt.Status, "")
 	} else {
 		c.Status(http.StatusOK)
 	}
