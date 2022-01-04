@@ -51,6 +51,10 @@ The webservice exposes some routes:
 
 # Contribution
 Feel free to leave an issue if you found a bug or need a new feature.
+TODO:
+- Centralize configuration in config package using [viper](https://github.com/spf13/viper) 
+- Fix various TODO
+- Communication with crowdsec?
 
 ## Test Setup
 2. Run test with `godotenv -f ./_test.env go test -cover`

@@ -22,16 +22,19 @@ type RequestProperties struct {
 }
 
 const (
+	BouncerSecRulesRecommended           = "BOUNCER_SEC_RULES_RECOMMENDED"
+	BouncerSecRulesOwasp                 = "BOUNCER_SEC_RULES_OWASP"
+	BouncerSecRulesPathDownloaded        = "BOUNCER_SEC_RULES_DOWNLOADED_PATH"
+	BouncerSecRulesPathDownloadedDefault = "/etc/bouncer/rules/downloaded"
+
 	BouncerSecRules            = "BOUNCER_SEC_RULES"
 	BouncerSecRulesPath        = "BOUNCER_SEC_RULES_PATH"
-	BouncerSecRulesPathDefault = "/etc/bouncer/rules/"
-	BouncerSecRulesOwasp       = "BOUNCER_SEC_RULES_OWASP"
-	BouncerSecRulesRecommended = "BOUNCER_SEC_RULES_RECOMMENDED"
+	BouncerSecRulesPathDefault = "/etc/bouncer/rules/custom"
 )
 
 var (
 	waf     *coraza.Waf
-	parser  *seclang.Parser
+	Parser  *seclang.Parser
 	initErr error
 )
 
@@ -39,27 +42,24 @@ var (
 Initialize coraza module
 */
 func init() {
-	// First we initialize our waf and our seclang parser
+	// First we initialize our waf and our seclang Parser
 	waf = coraza.NewWaf()
+	Parser, initErr = seclang.NewParser(waf)
+	if initErr != nil {
+		log.Fatal().Err(initErr).Msg("error while initializing seclang Parser")
+	}
 }
 
 func ParseSecrules() {
-	parser, initErr = seclang.NewParser(waf)
-	if initErr != nil {
-		log.Fatal().Err(initErr).Msg("error while initializing seclang parser")
-	}
-
-	// TODO adding rules
 	// Now we parse our rules
 	bouncerSecRules := utils.GetOptionalEnv(BouncerSecRules, "")
 	bouncerSecRulesDir := utils.GetOptionalEnv(BouncerSecRulesPath, BouncerSecRulesPathDefault)
 	bouncerSecRulesPath := filepath.Join(bouncerSecRulesDir, "*.conf")
 
-	if initErr := parser.FromString(bouncerSecRules); initErr != nil {
+	if initErr := Parser.FromString(bouncerSecRules); initErr != nil {
 		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", bouncerSecRules)
 	}
-	// TODO owasp example should be first to be read
-	if initErr := parser.FromFile(bouncerSecRulesPath); initErr != nil {
+	if initErr := Parser.FromFile(bouncerSecRulesPath); initErr != nil {
 		log.Fatal().Err(initErr).Msg("error while parsing rule(s) from rule file/directory")
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"os"
+	"path/filepath"
 )
 
 var (
@@ -19,15 +20,22 @@ var (
 func main() {
 	// FIXME through back errors instead of bool
 	if shouldDlRecommended == "true" {
-		success := downloader.DownloadCorazaRecommendation("/etc/bouncer/rules/")
+		success := downloader.DownloadCorazaRecommendation()
 		if !success {
 			log.Fatal().Msgf("Server failed to download recommended Coraza configuration")
 		}
+		if err := coraza.Parser.FromFile(downloader.CorazaConfPath); err != nil {
+			log.Fatal().Err(err).Msgf("error loading Coraza recommended configuration")
+		}
 	}
 	if shouldDlOwasp == "true" {
-		success := downloader.DownloadOwaspCoreRules("/etc/bouncer/rules/owasp/")
+		success := downloader.DownloadOwaspCoreRules()
 		if !success {
 			log.Fatal().Msgf("Server failed to download OWASP rulesec")
+		}
+		owaspPath := filepath.Join(downloader.OwaspConfExamplePath, "*.conf")
+		if initErr := coraza.Parser.FromFile(owaspPath); initErr != nil {
+			log.Fatal().Err(initErr).Msgf("error while loading Owasp core ruleset")
 		}
 	}
 	coraza.ParseSecrules()

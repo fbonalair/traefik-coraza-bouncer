@@ -15,25 +15,28 @@ import (
 
 // Coraza default recommended configuration
 const (
-	corazaConfUrl = "https://raw.githubusercontent.com/jptosso/coraza-waf/v2/master/coraza.conf-recommended"
+	OwaspConfExampleFileName = "crs-setup.conf.example"
+	corazaConfUrl            = "https://raw.githubusercontent.com/jptosso/coraza-waf/v2/master/coraza.conf-recommended"
 	// TODO dynamise version
 	coreRulesetUrl = "https://github.com/coreruleset/coreruleset/archive/refs/tags/v3.3.2.tar.gz"
 )
 
 var (
-	rulesDir                  = utils.GetOptionalEnv(coraza.BouncerSecRulesPath, coraza.BouncerSecRulesPathDefault)
-	corazaConfPath            = filepath.Join(rulesDir, "coraza.conf")
+	downloadedRulesDir        = utils.GetOptionalEnv(coraza.BouncerSecRulesPathDownloaded, coraza.BouncerSecRulesPathDownloadedDefault)
+	CorazaConfPath            = filepath.Join(downloadedRulesDir, "coraza.conf")
 	activeDownload            = utils.GetOptionalEnv(coraza.BouncerSecRulesOwasp, "true")
 	coreRulesetArchivePath    = filepath.Join("/tmp", "coreruleset.tar.gz") // TODO use temp dir ioutil.TempDir or os.TempDir()
 	corazaRecommendedFilePath = "coraza.conf-recommended"                   // TODO format to path
-
+	OwaspConfExamplePath      = filepath.Join(downloadedRulesDir, OwaspConfExampleFileName)
 )
 
-func DownloadCorazaRecommendation(targetDir string) bool { // FIXME use targetDir
-	return downloadUrlFile(corazaConfUrl, corazaConfPath)
+func DownloadCorazaRecommendation() bool { // FIXME use targetDir
+	// FIXME create dir if not present
+	return downloadUrlFile(corazaConfUrl, CorazaConfPath)
 }
 
-func DownloadOwaspCoreRules(targetDir string) bool {
+func DownloadOwaspCoreRules() bool {
+	// FIXME create dir if not present
 	success := downloadUrlFile(coreRulesetUrl, coreRulesetArchivePath)
 	if !success {
 		return false
@@ -64,12 +67,16 @@ func DownloadOwaspCoreRules(targetDir string) bool {
 		// Select only target files
 		if (!strings.Contains(archiveFile.Name, "/rules/") ||
 			archiveFile.FileInfo().IsDir()) &&
-			archiveFile.FileInfo().Name() != "crs-setup.conf.example" {
+			archiveFile.FileInfo().Name() != OwaspConfExampleFileName {
 			continue
 		}
 
 		// Creating an empty ruleset file
-		filePath := filepath.Join(rulesDir, "owasp", archiveFile.FileInfo().Name())
+		filePath := filepath.Join(downloadedRulesDir, "owasp", archiveFile.FileInfo().Name())
+		// Special path for OWASP conf example
+		if archiveFile.FileInfo().Name() == OwaspConfExampleFileName {
+			filePath = OwaspConfExamplePath
+		}
 		file, err := os.Create(filePath)
 		if err != nil {
 			log.Warn().Err(err).Msgf("Error while creating file at %s", filePath)
