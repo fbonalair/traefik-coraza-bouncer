@@ -37,9 +37,9 @@ The webservice configuration is made via environment variables:
 * `PORT`                                - Change listening port of web server. Default listen on 8080
 * `GIN_MODE`                            - By default, run app in "debug" mode. Set it to "release" in production
 * `BOUNCER_SEC_RULES`                   - WAF rules to apply by Coraza in [Seclang syntax](https://coraza.io/docs/seclang/syntax/). i.e. `SecRule REMOTE_ADDR \"@rx .*\" \"id:1,phase:1,deny,status:403\"` to deny everything
-* `BOUNCER_SEC_RULES_PATH`              - Path to file containing WAF rules to apply by Coraza in [Seclang syntax](https://coraza.io/docs/seclang/syntax/). i.e. `/etc/waf/custom-ruleset/myrules.conf`. Default to `/etc/bouncer/rules/*` to include all files in this directory (note the *)
-* `BOUNCER_SEC_RULES_RECOMMANDED`       - Boolean to download and applying coraza recommended configuration. Expected value are `true` or `false`, case-sensitive. Default to `true`.
-* `BOUNCER_SEC_RULES_OWASP`             - Boolean to download and applying top [10 OWASP core ruleset](https://coraza.io/docs/tutorials/coreruleset/). Expected value are `true` or `false`, case-sensitive. Default to `true`.
+* `BOUNCER_SEC_RULES.CUSTOM_PATH`       - Path to file containing WAF rules to apply by Coraza in [Seclang syntax](https://coraza.io/docs/seclang/syntax/). i.e. `/etc/waf/custom-ruleset/myrules.conf`. Default to `/etc/bouncer/rules/*` to include all files in this directory (note the *)
+* `BOUNCER_SEC_RULES.RECOMMENDED`       - Boolean to download and applying coraza recommended configuration. Expected value are `true` or `false`, case-sensitive. Default to `true`.
+* `BOUNCER_SEC_RULES.OWASP`             - Boolean to download and applying top [10 OWASP core ruleset](https://coraza.io/docs/tutorials/coreruleset/). Expected value are `true` or `false`, case-sensitive. Default to `true`.
 
 ## Exposed routes
 The webservice exposes some routes:
@@ -52,9 +52,11 @@ The webservice exposes some routes:
 # Contribution
 Feel free to leave an issue if you found a bug or need a new feature.
 TODO:
-- Centralize configuration in config package using [viper](https://github.com/spf13/viper) 
 - Fix various TODO
 - Communication with crowdsec?
+
+## Local development
+You should set your environment var `CONFIG_PATH` to the absolute path of file `configs/config.yaml`
 
 ## Test Setup
 2. Run test with `godotenv -f ./_test.env go test -cover`

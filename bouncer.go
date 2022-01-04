@@ -1,9 +1,7 @@
 package main
 
 import (
-	"github.com/fbonalair/traefik-coraza-bouncer/coraza"
-	"github.com/fbonalair/traefik-coraza-bouncer/downloader"
-	"github.com/fbonalair/traefik-coraza-bouncer/utils"
+	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/gin-contrib/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
@@ -13,32 +11,32 @@ import (
 )
 
 var (
-	shouldDlRecommended = utils.GetOptionalEnv(coraza.BouncerSecRulesRecommended, "true")
-	shouldDlOwasp       = utils.GetOptionalEnv(coraza.BouncerSecRulesOwasp, "true")
+	shouldDlRecommended = configs.Values.SecRules.Recommended
+	shouldDlOwasp       = configs.Values.SecRules.Owasp
 )
 
 func main() {
 	// FIXME through back errors instead of bool
-	if shouldDlRecommended == "true" {
-		success := downloader.DownloadCorazaRecommendation()
+	if shouldDlRecommended {
+		success := DownloadCorazaRecommendation()
 		if !success {
 			log.Fatal().Msgf("Server failed to download recommended Coraza configuration")
 		}
-		if err := coraza.Parser.FromFile(downloader.CorazaConfPath); err != nil {
+		if err := Parser.FromFile(CorazaConfPath); err != nil {
 			log.Fatal().Err(err).Msgf("error loading Coraza recommended configuration")
 		}
 	}
-	if shouldDlOwasp == "true" {
-		success := downloader.DownloadOwaspCoreRules()
+	if shouldDlOwasp {
+		success := DownloadOwaspCoreRules()
 		if !success {
 			log.Fatal().Msgf("Server failed to download OWASP rulesec")
 		}
-		owaspPath := filepath.Join(downloader.OwaspConfExamplePath, "*.conf")
-		if initErr := coraza.Parser.FromFile(owaspPath); initErr != nil {
+		owaspPath := filepath.Join(OwaspConfExamplePath, "*.conf")
+		if initErr := Parser.FromFile(owaspPath); initErr != nil {
 			log.Fatal().Err(initErr).Msgf("error while loading Owasp core ruleset")
 		}
 	}
-	coraza.ParseSecrules()
+	ParseSecRules()
 	router := setupRouter()
 	err := router.Run()
 	if err != nil {

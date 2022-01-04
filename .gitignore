@@ -1,5 +1,5 @@
 tmp/
-fixtures/rules/owasp/
+tests/rules/owasp/
 rules/
 
 # Binaries for programs and plugins

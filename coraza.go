@@ -1,13 +1,12 @@
-package coraza
+package main
 
 import (
-	"github.com/fbonalair/traefik-coraza-bouncer/utils"
+	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/jptosso/coraza-waf/v2"
 	"github.com/jptosso/coraza-waf/v2/seclang"
 	"github.com/jptosso/coraza-waf/v2/types"
 	"github.com/rs/zerolog/log"
 	"net/http"
-	"path/filepath"
 )
 
 /*
@@ -21,21 +20,13 @@ type RequestProperties struct {
 	Headers    http.Header
 }
 
-const (
-	BouncerSecRulesRecommended           = "BOUNCER_SEC_RULES_RECOMMENDED"
-	BouncerSecRulesOwasp                 = "BOUNCER_SEC_RULES_OWASP"
-	BouncerSecRulesPathDownloaded        = "BOUNCER_SEC_RULES_DOWNLOADED_PATH"
-	BouncerSecRulesPathDownloadedDefault = "/etc/bouncer/rules/downloaded"
-
-	BouncerSecRules            = "BOUNCER_SEC_RULES"
-	BouncerSecRulesPath        = "BOUNCER_SEC_RULES_PATH"
-	BouncerSecRulesPathDefault = "/etc/bouncer/rules/custom"
-)
-
 var (
 	waf     *coraza.Waf
 	Parser  *seclang.Parser
 	initErr error
+
+	bouncerSecCustomRulesPath = configs.Values.SecRules.CustomPath
+	bouncerSecRule            = configs.Values.SecRules.CustomRule
 )
 
 /**
@@ -50,16 +41,12 @@ func init() {
 	}
 }
 
-func ParseSecrules() {
+func ParseSecRules() {
 	// Now we parse our rules
-	bouncerSecRules := utils.GetOptionalEnv(BouncerSecRules, "")
-	bouncerSecRulesDir := utils.GetOptionalEnv(BouncerSecRulesPath, BouncerSecRulesPathDefault)
-	bouncerSecRulesPath := filepath.Join(bouncerSecRulesDir, "*.conf")
-
-	if initErr := Parser.FromString(bouncerSecRules); initErr != nil {
-		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", bouncerSecRules)
+	if initErr := Parser.FromString(bouncerSecRule); initErr != nil {
+		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", bouncerSecRule)
 	}
-	if initErr := Parser.FromFile(bouncerSecRulesPath); initErr != nil {
+	if initErr := Parser.FromFile(bouncerSecCustomRulesPath); initErr != nil {
 		log.Fatal().Err(initErr).Msg("error while parsing rule(s) from rule file/directory")
 	}
 }

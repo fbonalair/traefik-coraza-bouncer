@@ -1,0 +1,3 @@
+SEC_RULES:
+  DOWNLOADED_PATH: "./rules/downloaded"
+  CUSTOM_PATH: "./rules/custom/*"

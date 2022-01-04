@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/fbonalair/traefik-coraza-bouncer/coraza"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -43,7 +42,7 @@ func ForwardAuth(c *gin.Context) {
 		c.String(http.StatusForbidden, "Forbidden")
 	}
 
-	request := coraza.RequestProperties{
+	request := RequestProperties{
 		ClientIp:   c.Request.Header.Get(clientIpHeader),
 		ClientPort: 5489, // FIXME
 		ServerIp:   c.Request.Header.Get(serverHostHeader),
@@ -54,7 +53,7 @@ func ForwardAuth(c *gin.Context) {
 	request.Headers.Del(clientPortHeader)
 	request.Headers.Del(serverHostHeader)
 
-	interrupt := coraza.ProcessRequest(request)
+	interrupt := ProcessRequest(request)
 	if interrupt != nil {
 		c.String(interrupt.Status, "")
 	} else {
@@ -66,13 +65,13 @@ func ForwardAuth(c *gin.Context) {
 	Route to check bouncer WAF capability. Mainly use for Kubernetes readiness probe
 */
 func Healthz(c *gin.Context) {
-	request := coraza.RequestProperties{
+	request := RequestProperties{
 		ClientIp:   healthClientIp,
 		ClientPort: healthClientPort,
 		ServerIp:   healthServerIp,
 		ServerPort: healthServerPort,
 	}
-	interrupt := coraza.ProcessRequest(request)
+	interrupt := ProcessRequest(request)
 	if interrupt != nil {
 		c.String(interrupt.Status, "")
 	} else {

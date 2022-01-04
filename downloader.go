@@ -1,10 +1,9 @@
-package downloader
+package main
 
 import (
 	"archive/tar"
 	"compress/gzip"
-	"github.com/fbonalair/traefik-coraza-bouncer/coraza"
-	"github.com/fbonalair/traefik-coraza-bouncer/utils"
+	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/rs/zerolog/log"
 	"io"
 	"net/http"
@@ -13,21 +12,15 @@ import (
 	"strings"
 )
 
-// Coraza default recommended configuration
-const (
-	OwaspConfExampleFileName = "crs-setup.conf.example"
-	corazaConfUrl            = "https://raw.githubusercontent.com/jptosso/coraza-waf/v2/master/coraza.conf-recommended"
-	// TODO dynamise version
-	coreRulesetUrl = "https://github.com/coreruleset/coreruleset/archive/refs/tags/v3.3.2.tar.gz"
-)
-
 var (
-	downloadedRulesDir        = utils.GetOptionalEnv(coraza.BouncerSecRulesPathDownloaded, coraza.BouncerSecRulesPathDownloadedDefault)
-	CorazaConfPath            = filepath.Join(downloadedRulesDir, "coraza.conf")
-	activeDownload            = utils.GetOptionalEnv(coraza.BouncerSecRulesOwasp, "true")
-	coreRulesetArchivePath    = filepath.Join("/tmp", "coreruleset.tar.gz") // TODO use temp dir ioutil.TempDir or os.TempDir()
-	corazaRecommendedFilePath = "coraza.conf-recommended"                   // TODO format to path
-	OwaspConfExamplePath      = filepath.Join(downloadedRulesDir, OwaspConfExampleFileName)
+	downloadedRulesDir       = configs.Values.SecRules.DownloadedPath
+	coreRulesetUrl           = configs.Values.SecRules.OwaspUrl
+	corazaConfUrl            = configs.Values.SecRules.RecommendedUrl
+	OwaspConfExampleFileName = configs.Values.SecRules.OwaspUrlExampleFile
+
+	coreRulesetArchivePath = filepath.Join(os.TempDir(), "coreruleset.tar.gz")
+	CorazaConfPath         = filepath.Join(downloadedRulesDir, "coraza.conf")
+	OwaspConfExamplePath   = filepath.Join(downloadedRulesDir, OwaspConfExampleFileName)
 )
 
 func DownloadCorazaRecommendation() bool { // FIXME use targetDir
@@ -41,6 +34,7 @@ func DownloadOwaspCoreRules() bool {
 	if !success {
 		return false
 	}
+	defer os.Remove(coreRulesetArchivePath)
 	// TODO Verify archive with SHA
 
 	file, err := os.Open(coreRulesetArchivePath)
@@ -91,6 +85,9 @@ func DownloadOwaspCoreRules() bool {
 	return true
 }
 
+/*
+Download the file at the target Url to the local path
+*/
 func downloadUrlFile(targetUrl string, targetPath string) bool {
 	// Setup http client
 	client := http.Client{
