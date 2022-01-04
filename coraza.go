@@ -20,9 +20,10 @@ type CorazaRequestProperties struct {
 }
 
 const (
-	BouncerSecRules      = "BOUNCER_SEC_RULES"
-	BouncerSecRulesPath  = "BOUNCER_SEC_RULES_PATH"
-	BouncerSecRulesOwasp = "BOUNCER_SEC_RULES_OWASP"
+	BouncerSecRules            = "BOUNCER_SEC_RULES"
+	BouncerSecRulesPath        = "BOUNCER_SEC_RULES_PATH"
+	BouncerSecRulesPathDefault = "/etc/bouncer/rules/*"
+	BouncerSecRulesOwasp       = "BOUNCER_SEC_RULES_OWASP"
 )
 
 var (
@@ -45,8 +46,13 @@ func init() {
 	// TODO adding rules
 	// Now we parse our rules
 	bouncerSecRules := GetOptionalEnv(BouncerSecRules, "")
+	bouncerSecRulesPath := GetOptionalEnv(BouncerSecRulesPath, BouncerSecRulesPathDefault)
+
 	if initErr := parser.FromString(bouncerSecRules); initErr != nil {
 		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", bouncerSecRules)
+	}
+	if initErr := parser.FromFile(bouncerSecRulesPath); initErr != nil {
+		log.Fatal().Err(initErr).Msg("error while parsing rule(s) from rule file/directory")
 	}
 }
 

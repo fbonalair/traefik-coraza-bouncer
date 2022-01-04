@@ -15,6 +15,7 @@ const (
 	clientIpHeader   = "X-Real-Ip" // or X-Forwarded-For
 	clientPortHeader = "X-Forwarded-Port"
 
+	// TODO use environment val + default
 	healthClientIp   = "192.168.1.1"
 	healthClientPort = 12345
 	healthServerIp   = "10.42.1.1"
