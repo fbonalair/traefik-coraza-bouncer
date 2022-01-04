@@ -19,6 +19,12 @@ type CorazaRequestProperties struct {
 	Headers    http.Header
 }
 
+const (
+	BouncerSecRules      = "BOUNCER_SEC_RULES"
+	BouncerSecRulesPath  = "BOUNCER_SEC_RULES_PATH"
+	BouncerSecRulesOwasp = "BOUNCER_SEC_RULES_OWASP"
+)
+
 var (
 	waf     *coraza.Waf
 	parser  *seclang.Parser
@@ -38,14 +44,16 @@ func init() {
 
 	// TODO adding rules
 	// Now we parse our rules
-	//if initErr := parser.FromString(`SecRule REMOTE_ADDR "@rx .*" "id:1,phase:1,deny,status:403"`); initErr != nil {
-	//	log.Fatal().Err(initErr).Msg("error while parsing rule")
-	//}
+	bouncerSecRules := GetOptionalEnv(BouncerSecRules, "")
+	if initErr := parser.FromString(bouncerSecRules); initErr != nil {
+		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", bouncerSecRules)
+	}
 }
 
 func ProcessRequest(request CorazaRequestProperties) *types.Interruption {
 	// We create a transaction and assign some variables
 	tx := waf.NewTransaction()
+	defer tx.ProcessLogging()
 	tx.ProcessConnection(request.ClientIp, request.ServerPort, request.ServerIp, request.ServerPort)
 
 	// Adding request headers

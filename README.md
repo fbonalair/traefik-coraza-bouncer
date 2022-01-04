@@ -36,13 +36,16 @@ The webservice configuration is made via environment variables:
 
 * `PORT`                                - Change listening port of web server. Default listen on 8080
 * `GIN_MODE`                            - By default, run app in "debug" mode. Set it to "release" in production
+* `BOUNCER_SEC_RULES`                   - WAF rules to apply by Coraza in [Seclang syntax](https://coraza.io/docs/seclang/syntax/). i.e. `SecRule REMOTE_ADDR \"@rx .*\" \"id:1,phase:1,deny,status:403\"` to deny everything
+* `BOUNCER_SEC_RULES_PATH`              - Path to file containing WAF rules to apply by Coraza in [Seclang syntax](https://coraza.io/docs/seclang/syntax/). i.e. `/etc/bouncer/custom-ruleset/rules/myrules.conf`
+* `BOUNCER_SEC_RULES_OWASP`             - Boolean indicating whether  to download and applying top [10 OWASP core ruleset](https://coraza.io/docs/tutorials/coreruleset/). Expected value are 'true' or 'false', case-sensitive.
 
 ## Exposed routes
 The webservice exposes some routes:
 
 * GET `/api/v1/forwardAuth`             - Main route to be used by Traefik: use Coraza with information taken from headers
 * GET `/api/v1/ping`                    - Simple health route that respond pong with http 200
-* GET `/api/v1/healthz`                 - ???
+* GET `/api/v1/healthz`                 - Another health route that query Coraza with some default values
 * GET `/api/v1/metrics`                 - Prometheus route to scrap metrics
 
 # Contribution
