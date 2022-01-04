@@ -1,4 +1,6 @@
 tmp/
+fixtures/rules/owasp/
+rules/
 
 # Binaries for programs and plugins
 *.exe

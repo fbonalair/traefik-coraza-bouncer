@@ -1,15 +1,36 @@
 package main
 
 import (
-	"os"
-
+	"github.com/fbonalair/traefik-coraza-bouncer/coraza"
+	"github.com/fbonalair/traefik-coraza-bouncer/downloader"
+	"github.com/fbonalair/traefik-coraza-bouncer/utils"
 	"github.com/gin-contrib/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"os"
+)
+
+var (
+	shouldDlRecommended = utils.GetOptionalEnv(coraza.BouncerSecRulesRecommended, "true")
+	shouldDlOwasp       = utils.GetOptionalEnv(coraza.BouncerSecRulesOwasp, "true")
 )
 
 func main() {
+	// FIXME through back errors instead of bool
+	if shouldDlRecommended == "true" {
+		success := downloader.DownloadCorazaRecommendation("/etc/bouncer/rules/")
+		if !success {
+			log.Fatal().Msgf("Server failed to download recommended Coraza configuration")
+		}
+	}
+	if shouldDlOwasp == "true" {
+		success := downloader.DownloadOwaspCoreRules("/etc/bouncer/rules/owasp/")
+		if !success {
+			log.Fatal().Msgf("Server failed to download OWASP rulesec")
+		}
+	}
+	coraza.ParseSecrules()
 	router := setupRouter()
 	err := router.Run()
 	if err != nil {

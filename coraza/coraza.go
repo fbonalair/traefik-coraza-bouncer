@@ -1,17 +1,19 @@
-package main
+package coraza
 
 import (
+	"github.com/fbonalair/traefik-coraza-bouncer/utils"
 	"github.com/jptosso/coraza-waf/v2"
 	"github.com/jptosso/coraza-waf/v2/seclang"
 	"github.com/jptosso/coraza-waf/v2/types"
 	"github.com/rs/zerolog/log"
 	"net/http"
+	"path/filepath"
 )
 
 /*
 	Data representing a request for Coraza
 */
-type CorazaRequestProperties struct {
+type RequestProperties struct {
 	ClientIp   string
 	ClientPort int
 	ServerIp   string
@@ -22,8 +24,9 @@ type CorazaRequestProperties struct {
 const (
 	BouncerSecRules            = "BOUNCER_SEC_RULES"
 	BouncerSecRulesPath        = "BOUNCER_SEC_RULES_PATH"
-	BouncerSecRulesPathDefault = "/etc/bouncer/rules/*"
+	BouncerSecRulesPathDefault = "/etc/bouncer/rules/"
 	BouncerSecRulesOwasp       = "BOUNCER_SEC_RULES_OWASP"
+	BouncerSecRulesRecommended = "BOUNCER_SEC_RULES_RECOMMENDED"
 )
 
 var (
@@ -38,6 +41,9 @@ Initialize coraza module
 func init() {
 	// First we initialize our waf and our seclang parser
 	waf = coraza.NewWaf()
+}
+
+func ParseSecrules() {
 	parser, initErr = seclang.NewParser(waf)
 	if initErr != nil {
 		log.Fatal().Err(initErr).Msg("error while initializing seclang parser")
@@ -45,18 +51,20 @@ func init() {
 
 	// TODO adding rules
 	// Now we parse our rules
-	bouncerSecRules := GetOptionalEnv(BouncerSecRules, "")
-	bouncerSecRulesPath := GetOptionalEnv(BouncerSecRulesPath, BouncerSecRulesPathDefault)
+	bouncerSecRules := utils.GetOptionalEnv(BouncerSecRules, "")
+	bouncerSecRulesDir := utils.GetOptionalEnv(BouncerSecRulesPath, BouncerSecRulesPathDefault)
+	bouncerSecRulesPath := filepath.Join(bouncerSecRulesDir, "*.conf")
 
 	if initErr := parser.FromString(bouncerSecRules); initErr != nil {
 		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", bouncerSecRules)
 	}
+	// TODO owasp example should be first to be read
 	if initErr := parser.FromFile(bouncerSecRulesPath); initErr != nil {
 		log.Fatal().Err(initErr).Msg("error while parsing rule(s) from rule file/directory")
 	}
 }
 
-func ProcessRequest(request CorazaRequestProperties) *types.Interruption {
+func ProcessRequest(request RequestProperties) *types.Interruption {
 	// We create a transaction and assign some variables
 	tx := waf.NewTransaction()
 	defer tx.ProcessLogging()
