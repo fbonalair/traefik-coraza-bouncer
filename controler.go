@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -14,15 +15,16 @@ const (
 	serverHostHeader = "X-Forwarded-Host"
 	clientIpHeader   = "X-Real-Ip" // or X-Forwarded-For
 	clientPortHeader = "X-Forwarded-Port"
-
-	// TODO use environment val + default
-	healthClientIp   = "192.168.1.1"
-	healthClientPort = 12345
-	healthServerIp   = "10.42.1.1"
-	healthServerPort = 8080
 )
 
 var (
+	healthClientIp   = configs.Values.HealthzRoute.ClientIp
+	healthClientPort = configs.Values.HealthzRoute.ClientPort
+	healthServerIp   = configs.Values.HealthzRoute.ServerIp
+	healthServerPort = configs.Values.HealthzRoute.ServerPort
+
+	clientPort = configs.Values.HealthzRoute.ServerPort
+
 	requestProcessed = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "traefik_coraza_bouncer_processed_request_total",
 		Help: "The total number of processed requests",
@@ -44,7 +46,7 @@ func ForwardAuth(c *gin.Context) {
 
 	request := RequestProperties{
 		ClientIp:   c.Request.Header.Get(clientIpHeader),
-		ClientPort: 5489, // FIXME
+		ClientPort: clientPort,
 		ServerIp:   c.Request.Header.Get(serverHostHeader),
 		ServerPort: serverPort,
 		Headers:    c.Request.Header.Clone(),

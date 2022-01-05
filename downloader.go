@@ -3,9 +3,13 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/sha1"
+	"encoding/hex"
+	"errors"
 	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/rs/zerolog/log"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,26 +20,39 @@ var (
 	downloadedRulesDir       = configs.Values.SecRules.DownloadedPath
 	coreRulesetUrl           = configs.Values.SecRules.OwaspUrl
 	corazaConfUrl            = configs.Values.SecRules.RecommendedUrl
-	OwaspConfExampleFileName = configs.Values.SecRules.OwaspUrlExampleFile
+	owaspConfExampleFileName = configs.Values.SecRules.OwaspUrlExampleFile
+	owaspSha                 = configs.Values.SecRules.OwaspSha
 
 	coreRulesetArchivePath = filepath.Join(os.TempDir(), "coreruleset.tar.gz")
 	CorazaConfPath         = filepath.Join(downloadedRulesDir, "coraza.conf")
-	OwaspConfExamplePath   = filepath.Join(downloadedRulesDir, OwaspConfExampleFileName)
+	OwaspConfExamplePath   = filepath.Join(downloadedRulesDir, owaspConfExampleFileName)
 )
 
-func DownloadCorazaRecommendation() bool { // FIXME use targetDir
-	// FIXME create dir if not present
+func DownloadCorazaRecommendation() bool {
 	return downloadUrlFile(corazaConfUrl, CorazaConfPath)
 }
 
 func DownloadOwaspCoreRules() bool {
-	// FIXME create dir if not present
 	success := downloadUrlFile(coreRulesetUrl, coreRulesetArchivePath)
 	if !success {
 		return false
 	}
 	defer os.Remove(coreRulesetArchivePath)
-	// TODO Verify archive with SHA
+
+	// Verify archive SHA1
+	if owaspSha != "" {
+		hash := sha1.New()
+		bytes, _ := os.ReadFile(coreRulesetArchivePath)
+		if _, err := hash.Write(bytes); err != nil {
+			log.Fatal().Err(err).Msg("Error while computing SHA of core ruleset archive")
+		}
+		obtainedSha := hex.EncodeToString(hash.Sum(nil))
+		if owaspSha != obtainedSha {
+			log.Fatal().Msgf("Expected SHA of core ruleset archive different to obtained value: %s vs %s", owaspSha, obtainedSha)
+		} else {
+			log.Info().Msgf("Downloaded archive SHA is valid, obtained %s", obtainedSha)
+		}
+	}
 
 	file, err := os.Open(coreRulesetArchivePath)
 	if err != nil {
@@ -61,14 +78,29 @@ func DownloadOwaspCoreRules() bool {
 		// Select only target files
 		if (!strings.Contains(archiveFile.Name, "/rules/") ||
 			archiveFile.FileInfo().IsDir()) &&
-			archiveFile.FileInfo().Name() != OwaspConfExampleFileName {
+			archiveFile.FileInfo().Name() != owaspConfExampleFileName {
 			continue
+		}
+
+		// Checking if owasp folder exist and creating it if needed
+		sourceDir := filepath.Join(downloadedRulesDir, "owasp")
+		_, err = os.Stat(sourceDir)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				subErr := os.MkdirAll(sourceDir, 0755)
+				if subErr != nil {
+					log.Warn().Err(subErr).Msgf("Error while creating coraza configuration target directory %s", sourceDir)
+					return false
+				}
+			} else {
+				log.Warn().Err(err).Msgf("Error while accessing coraza configuration target directory %s", sourceDir)
+			}
 		}
 
 		// Creating an empty ruleset file
 		filePath := filepath.Join(downloadedRulesDir, "owasp", archiveFile.FileInfo().Name())
 		// Special path for OWASP conf example
-		if archiveFile.FileInfo().Name() == OwaspConfExampleFileName {
+		if archiveFile.FileInfo().Name() == owaspConfExampleFileName {
 			filePath = OwaspConfExamplePath
 		}
 		file, err := os.Create(filePath)
@@ -107,6 +139,22 @@ func downloadUrlFile(targetUrl string, targetPath string) bool {
 		return false
 	}
 	defer resp.Body.Close()
+
+	// Checking if target file directory exist and creating it if needed
+	lastSlash := strings.LastIndexByte(targetPath, '/')
+	sourceDir := targetPath[0:lastSlash]
+	_, err = os.Stat(sourceDir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			subErr := os.MkdirAll(sourceDir, 0755)
+			if subErr != nil {
+				log.Warn().Err(subErr).Msgf("Error while creating coraza configuration target directory %s", sourceDir)
+				return false
+			}
+		} else {
+			log.Warn().Err(err).Msgf("Error while accessing coraza configuration target directory %s", sourceDir)
+		}
+	}
 
 	// Create blank file
 	file, err := os.Create(targetPath)

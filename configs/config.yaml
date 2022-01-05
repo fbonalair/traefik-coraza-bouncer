@@ -1,3 +1,4 @@
 SEC_RULES:
   DOWNLOADED_PATH: "./rules/downloaded"
   CUSTOM_PATH: "./rules/custom/*"
+  OWASP_SHA: "63aa8ee3f3c9cb23f5639dd235bac1fa1bc64264"
