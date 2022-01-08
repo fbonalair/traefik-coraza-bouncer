@@ -1,6 +1,6 @@
 tmp/
 tests/rules/owasp/
-rules/
+rules/downloaded/
 
 # Binaries for programs and plugins
 *.exe

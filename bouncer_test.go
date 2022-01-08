@@ -116,11 +116,11 @@ func TestCustomRules(t *testing.T) {
 }
 
 func TestForwardAuthBouncerSecRulesPath(t *testing.T) {
-	router := mainTest(viper.New()).router
+	viperConfig := viper.New()
+	viperConfig.Set("SEC_RULES.CUSTOM_PATH", "./test/rules/custom/*")
+	router := mainTest(viperConfig).router
 	w := httptest.NewRecorder()
 
-	//configs.Values.SecRules.CustomPath = "./test/rules/custom/*"
-	//ParseSecRules()
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
 	req.Header.Add("X-Real-Ip", "3.3.3.3")
 	req.Header.Add("X-Forwarded-Host", "127.0.0.1")
