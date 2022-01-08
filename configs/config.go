@@ -69,6 +69,6 @@ func init() {
 	}
 
 	if err := Unmarshal(&Values); err != nil {
-		log.Fatal().Err(err).Msg("unable to decode Config into struct")
+		log.Fatal().Err(err).Msg("Unable to decode Config into struct")
 	}
 }

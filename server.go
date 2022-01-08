@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/fbonalair/traefik-coraza-bouncer/configs"
+	"github.com/gin-contrib/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -10,6 +11,16 @@ import (
 	"net/http"
 	"strconv"
 )
+
+type Server struct {
+	waf    *WafWrapper
+	router *gin.Engine
+
+	Metrics struct {
+		registry         *prometheus.Registry
+		requestProcessed prometheus.Counter
+	}
+}
 
 const (
 	serverHostHeader = "X-Forwarded-Host"
@@ -24,23 +35,48 @@ var (
 	healthServerPort = configs.Values.HealthzRoute.ServerPort
 
 	clientPort = configs.Values.HealthzRoute.ServerPort
+)
 
-	requestProcessed = promauto.NewCounter(prometheus.CounterOpts{
+func NewServer(waf *WafWrapper, registry *prometheus.Registry) (server *Server) {
+	server = &Server{waf: waf}
+	server.Metrics.registry = registry
+
+	// Web framework
+	router := gin.New()
+	router.SetTrustedProxies(nil)
+	router.Use(logger.SetLogger(
+		logger.WithSkipPath([]string{"/api/v1/ping", "/api/v1/healthz"}),
+	))
+
+	// Add routes
+	router.GET("/api/v1/ping", server.ping)
+	router.GET("/api/v1/healthz", server.healthz)
+	router.GET("/api/v1/forwardAuth", server.forwardAuth)
+	router.GET("/api/v1/metrics", server.metrics)
+
+	//server.Metrics.requestProcessed = prometheus.NewCounter(prometheus.CounterOpts{
+	//	Name: "traefik_coraza_bouncer_processed_request_total",
+	//	Help: "The total number of processed requests",
+	//})
+	server.Metrics.requestProcessed = promauto.With(registry).NewCounter(prometheus.CounterOpts{
 		Name: "traefik_coraza_bouncer_processed_request_total",
 		Help: "The total number of processed requests",
 	})
-)
+
+	server.router = router
+	return
+}
 
 /*
 	Main route used by Traefik to verify authorization for a request
 */
-func ForwardAuth(c *gin.Context) {
-	requestProcessed.Inc()
+func (server *Server) forwardAuth(c *gin.Context) {
+	server.Metrics.requestProcessed.Inc()
 
 	// Parsing int
 	serverPort, err := strconv.Atoi(c.Request.Header.Get(clientPortHeader))
 	if err != nil {
-		log.Warn().Err(err).Msg("Can't convert server port to int")
+		log.Warn().Err(err).Msg("Can't convert server port to int. Access will be forbidden")
 		c.String(http.StatusForbidden, "Forbidden")
 	}
 
@@ -55,7 +91,7 @@ func ForwardAuth(c *gin.Context) {
 	request.Headers.Del(clientPortHeader)
 	request.Headers.Del(serverHostHeader)
 
-	interrupt := ProcessRequest(request)
+	interrupt := server.waf.ProcessRequest(request)
 	if interrupt != nil {
 		c.String(interrupt.Status, "")
 	} else {
@@ -66,14 +102,14 @@ func ForwardAuth(c *gin.Context) {
 /*
 	Route to check bouncer WAF capability. Mainly use for Kubernetes readiness probe
 */
-func Healthz(c *gin.Context) {
+func (server *Server) healthz(c *gin.Context) {
 	request := RequestProperties{
 		ClientIp:   healthClientIp,
 		ClientPort: healthClientPort,
 		ServerIp:   healthServerIp,
 		ServerPort: healthServerPort,
 	}
-	interrupt := ProcessRequest(request)
+	interrupt := server.waf.ProcessRequest(request)
 	if interrupt != nil {
 		c.String(interrupt.Status, "")
 	} else {
@@ -84,11 +120,15 @@ func Healthz(c *gin.Context) {
 /*
 	Simple route responding pong to every request. Mainly use for Kubernetes liveliness probe
 */
-func Ping(c *gin.Context) {
+func (server *Server) ping(c *gin.Context) {
 	c.String(http.StatusOK, "pong")
 }
 
-func Metrics(c *gin.Context) {
-	handler := promhttp.Handler()
+func (server *Server) metrics(c *gin.Context) {
+	handler := promhttp.HandlerFor(server.Metrics.registry, promhttp.HandlerOpts{})
 	handler.ServeHTTP(c.Writer, c.Request)
+}
+
+func (server *Server) Start() error {
+	return server.router.Run()
 }

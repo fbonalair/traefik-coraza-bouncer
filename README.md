@@ -18,7 +18,16 @@ One important thing to note though, the request body will **NOT** be taken into 
 
 # Demo
 ## Prerequisites
-???
+[Docker](https://docs.docker.com/get-docker/) and [Docker-compose](https://docs.docker.com/compose/install/) installed.   
+You can use the docker-compose in the examples' folder as a starting point.
+Through traefik it exposes the whoami countainer on port 80, with the bouncer accepting and rejecting client IP.   
+Launch your all services except the bouncer with the follow commands:
+```bash
+git clone https://github.com/fbonalair/traefik-crowdsec-bouncer.git && \
+  cd traefik-crowdsec-bouncer/examples && \
+  docker-compose up -d traefik crowdsec whoami 
+```
+
 
 ## Procedure
 ???
@@ -52,11 +61,7 @@ The webservice exposes some routes:
 # Contribution
 Feel free to leave an issue if you found a bug or need a new feature.
 TODO:
-- Fix various TODO
 - Communication with crowdsec?
 
 ## Local development
 You should set your environment var `CONFIG_PATH` to the absolute path of file `configs/config.yaml`
-
-## Test Setup
-2. Run test with `godotenv -f ./_test.env go test -cover`
