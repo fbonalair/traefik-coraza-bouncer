@@ -16,9 +16,9 @@ func main() {
 	if configPath == "" {
 		configPath = "/etc/bouncer/"
 	}
-	viper := viper.New()
+	viperConfig := viper.New()
 
-	router := CreateRouter(configPath, viper)
+	router := CreateRouter(configPath, viperConfig)
 	err := router.Start()
 	if err != nil {
 		log.Fatal().Err(err).Msgf("An error occurred while starting bouncer")
@@ -70,7 +70,7 @@ func fetchAndParseSecRules(config configs.Config, waf *WafWrapper) (err error) {
 		if !success {
 			log.Fatal().Msgf("Server failed to download recommended Coraza configuration")
 		}
-		if err := waf.parseRulesFromFile(config.CustomPath); err != nil {
+		if err := waf.parseRulesFromFile(dl.corazaConfPath); err != nil {
 			log.Fatal().Err(err).Msgf("Error loading Coraza recommended configuration")
 		}
 	}

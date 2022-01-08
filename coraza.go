@@ -56,9 +56,9 @@ func NewWafWrapper(registry *prometheus.Registry) (wrapper *WafWrapper, err erro
 	return
 }
 
-func (waf WafWrapper) parseRulesFromString(path string) (err error) {
-	if err = waf.parser.FromString(path); err != nil {
-		log.Fatal().Err(err).Msg("error while parsing rule(s) from rule file/directory")
+func (waf WafWrapper) parseRulesFromString(value string) (err error) {
+	if err = waf.parser.FromString(value); err != nil {
+		log.Fatal().Err(err).Msgf("error while parsing rule(s) from value %s", value)
 		return
 	}
 	waf.Metrics.SecrulesAmount.Set(float64(waf.waf.Rules.Count()))

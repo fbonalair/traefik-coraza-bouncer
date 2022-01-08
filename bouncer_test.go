@@ -1,9 +1,6 @@
 package main
 
 import (
-	"github.com/fbonalair/traefik-coraza-bouncer/configs"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 	"net/http"
 	"net/http/httptest"
@@ -24,37 +21,12 @@ func beforeEach() {}
 
 func afterEach() {}
 
-func mainTest(viper *viper.Viper) *Server {
-	// FIXME factorise this test main and normal main
-	setupLogger()
-	registry := prometheus.NewRegistry()
-
-	configPath := "./test"
-	viper.Set("SEC_RULES.DOWNLOADED_PATH", "./test/rules/downloaded")
-	viper.Set("SEC_RULES.RECOMMENDED", false)
-	viper.Set("SEC_RULES.OWASP", false)
-	config := configs.ParseConfig(configPath, viper)
-
-	waf, err := NewWafWrapper(registry)
-	if err != nil {
-		log.Fatal().Err(err).Msg("error while initializing seclang parser")
-	}
-
-	err = fetchAndParseSecRules(config, waf)
-	if err != nil {
-		log.Fatal().Err(err).Msg("error while fetching configuration file(s)")
-	}
-
-	return NewServer(waf, registry, config.HealthzRoute)
-}
-
 func TestPing(t *testing.T) {
-	server := mainTest(viper.New())
-
+	router := CreateRouter("./test", viper.New()).router
 	w := httptest.NewRecorder()
 
 	req, err := http.NewRequest("GET", "/api/v1/ping", nil)
-	server.router.ServeHTTP(w, req)
+	router.ServeHTTP(w, req)
 
 	assert.NoError(t, err)
 	assert.Equal(t, 200, w.Code)
@@ -63,7 +35,7 @@ func TestPing(t *testing.T) {
 }
 
 func TestHealthz(t *testing.T) {
-	router := mainTest(viper.New()).router
+	router := CreateRouter("./test", viper.New()).router
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/healthz", nil)
@@ -73,7 +45,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestMetrics(t *testing.T) {
-	router := mainTest(viper.New()).router
+	router := CreateRouter("./test", viper.New()).router
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/metrics", nil)
@@ -88,22 +60,33 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestForwardAuth(t *testing.T) {
-	router := mainTest(viper.New()).router
+	t.Run("Simple Request", simpleRequest)
+	t.Run("Custom rules", FACustomRule)
+	t.Run("Custom path rules", FABouncerSecRulesPath)
+	t.Run("Coraza recommended", FACorazaRecommended)
+	t.Run("OWASP recommended", FAOwaspRecommended)
+}
+
+func simpleRequest(t *testing.T) {
+	server := CreateRouter("./test", viper.New())
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
 	req.Header.Add("X-Real-Ip", "1.1.1.1")
 	req.Header.Add("X-Forwarded-Host", "127.0.0.1")
 	req.Header.Add("X-Forwarded-Port", "8080")
-	router.ServeHTTP(w, req)
+	req.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	server.router.ServeHTTP(w, req)
 
 	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, server.waf.waf.Rules.Count(), 0)
+
 }
 
-func TestCustomRules(t *testing.T) {
+func FACustomRule(t *testing.T) {
 	viperConfig := viper.New()
 	viperConfig.Set("SEC_RULES.CUSTOM_RULE", "SecRule REMOTE_ADDR \"@rx 2.2.2.2\" \"id:1,phase:1,deny,status:403\"")
-	router := mainTest(viperConfig).router
+	router := CreateRouter("./test", viperConfig).router
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
@@ -115,10 +98,10 @@ func TestCustomRules(t *testing.T) {
 	assert.Equal(t, 403, w.Code)
 }
 
-func TestForwardAuthBouncerSecRulesPath(t *testing.T) {
+func FABouncerSecRulesPath(t *testing.T) {
 	viperConfig := viper.New()
 	viperConfig.Set("SEC_RULES.CUSTOM_PATH", "./test/rules/custom/*")
-	router := mainTest(viperConfig).router
+	router := CreateRouter("./test", viperConfig).router
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
@@ -128,4 +111,37 @@ func TestForwardAuthBouncerSecRulesPath(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, 403, w.Code)
+}
+
+func FACorazaRecommended(t *testing.T) {
+	viperConfig := viper.New()
+	viperConfig.Set("SEC_RULES.RECOMMENDED", true)
+	server := CreateRouter("./test", viperConfig)
+	w := httptest.NewRecorder()
+
+	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
+	req.Header.Add("X-Real-Ip", "2.2.2.2")
+	req.Header.Add("X-Forwarded-Host", "127.0.0.1")
+	req.Header.Add("X-Forwarded-Port", "8080")
+	server.router.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	assert.Greater(t, server.waf.waf.Rules.Count(), 0)
+}
+
+func FAOwaspRecommended(t *testing.T) {
+	viperConfig := viper.New()
+	viperConfig.Set("SEC_RULES.OWASP", true)
+	viperConfig.Set("SEC_RULES.OWASP_SHA", "63aa8ee3f3c9cb23f5639dd235bac1fa1bc64264")
+	server := CreateRouter("./test", viperConfig)
+	w := httptest.NewRecorder()
+
+	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
+	req.Header.Add("X-Real-Ip", "2.2.2.2")
+	req.Header.Add("X-Forwarded-Host", "127.0.0.1")
+	req.Header.Add("X-Forwarded-Port", "8080")
+	server.router.ServeHTTP(w, req)
+
+	assert.Equal(t, 200, w.Code)
+	assert.Greater(t, server.waf.waf.Rules.Count(), 0)
 }
