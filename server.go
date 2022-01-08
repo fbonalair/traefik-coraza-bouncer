@@ -20,6 +20,7 @@ type Server struct {
 		registry         *prometheus.Registry
 		requestProcessed prometheus.Counter
 	}
+	config configs.HealthzRoute
 }
 
 const (
@@ -28,17 +29,11 @@ const (
 	clientPortHeader = "X-Forwarded-Port"
 )
 
-var (
-	healthClientIp   = configs.Values.HealthzRoute.ClientIp
-	healthClientPort = configs.Values.HealthzRoute.ClientPort
-	healthServerIp   = configs.Values.HealthzRoute.ServerIp
-	healthServerPort = configs.Values.HealthzRoute.ServerPort
-
-	clientPort = configs.Values.HealthzRoute.ServerPort
-)
-
-func NewServer(waf *WafWrapper, registry *prometheus.Registry) (server *Server) {
-	server = &Server{waf: waf}
+func NewServer(waf *WafWrapper, registry *prometheus.Registry, config configs.HealthzRoute) (server *Server) {
+	server = &Server{
+		waf:    waf,
+		config: config,
+	}
 	server.Metrics.registry = registry
 
 	// Web framework
@@ -82,7 +77,7 @@ func (server *Server) forwardAuth(c *gin.Context) {
 
 	request := RequestProperties{
 		ClientIp:   c.Request.Header.Get(clientIpHeader),
-		ClientPort: clientPort,
+		ClientPort: server.config.ClientPort, // FIXME use a different property
 		ServerIp:   c.Request.Header.Get(serverHostHeader),
 		ServerPort: serverPort,
 		Headers:    c.Request.Header.Clone(),
@@ -104,10 +99,10 @@ func (server *Server) forwardAuth(c *gin.Context) {
 */
 func (server *Server) healthz(c *gin.Context) {
 	request := RequestProperties{
-		ClientIp:   healthClientIp,
-		ClientPort: healthClientPort,
-		ServerIp:   healthServerIp,
-		ServerPort: healthServerPort,
+		ClientIp:   server.config.ClientIp,
+		ClientPort: server.config.ClientPort,
+		ServerIp:   server.config.ServerIp,
+		ServerPort: server.config.ServerPort,
 	}
 	interrupt := server.waf.ProcessRequest(request)
 	if interrupt != nil {

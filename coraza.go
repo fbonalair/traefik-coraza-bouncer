@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/jptosso/coraza-waf/v2"
 	"github.com/jptosso/coraza-waf/v2/seclang"
 	"github.com/jptosso/coraza-waf/v2/types"
@@ -32,13 +31,6 @@ type RequestProperties struct {
 	Headers    http.Header
 }
 
-var (
-	shouldDlRecommended       = &configs.Values.SecRules.Recommended
-	shouldDlOwasp             = &configs.Values.SecRules.Owasp
-	bouncerSecCustomRulesPath = &configs.Values.SecRules.CustomPath
-	bouncerSecRule            = &configs.Values.SecRules.CustomRule
-)
-
 /**
 Initialize coraza module
 */
@@ -63,38 +55,6 @@ func NewWafWrapper(registry *prometheus.Registry) (wrapper *WafWrapper, err erro
 
 	return
 }
-
-//func ParseSecRules() {
-//	// Fetching and adding coraza recommended configuration
-//	if *shouldDlRecommended {
-//		success := DownloadCorazaRecommendation()
-//		if !success {
-//			log.Fatal().Msgf("Server failed to download recommended Coraza configuration")
-//		}
-//		if err := parser.FromFile(CorazaConfPath); err != nil {
-//			log.Fatal().Err(err).Msgf("Error loading Coraza recommended configuration")
-//		}
-//	}
-//
-//	// Fetching and parsing OWASP core Ruleset
-//	if *shouldDlOwasp {
-//		success := DownloadOwaspCoreRules()
-//		if !success {
-//			log.Fatal().Msgf("Server failed to download OWASP rulesec")
-//		}
-//		owaspPath := filepath.Join(OwaspConfExamplePath, "*.conf")
-//		if initErr := parser.FromFile(owaspPath); initErr != nil {
-//			log.Fatal().Err(initErr).Msgf("error while loading Owasp core ruleset")
-//		}
-//	}
-//	// Now we parse our custom rules
-//	if initErr := parser.FromString(*bouncerSecRule); initErr != nil {
-//		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", *bouncerSecRule)
-//	}
-//	if initErr := parser.FromFile(*bouncerSecCustomRulesPath); initErr != nil {
-//		log.Fatal().Err(initErr).Msg("error while parsing rule(s) from rule file/directory")
-//	}
-//}
 
 func (waf WafWrapper) parseRulesFromString(path string) (err error) {
 	if err = waf.parser.FromString(path); err != nil {

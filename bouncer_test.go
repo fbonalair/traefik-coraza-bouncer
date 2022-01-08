@@ -4,6 +4,7 @@ import (
 	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
+	"github.com/spf13/viper"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,33 +20,36 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func beforeEach() {
-	configs.Values.SecRules.Owasp = false
-	configs.Values.SecRules.Recommended = false
-	configs.Values.SecRules.CustomRule = ""
-	configs.Values.SecRules.CustomPath = "./test/rules/empty/*.conf"
-}
+func beforeEach() {}
 
 func afterEach() {}
 
-func mainTest() *Server {
+func mainTest(viper *viper.Viper) *Server {
+	// FIXME factorise this test main and normal main
 	setupLogger()
 	registry := prometheus.NewRegistry()
+
+	configPath := "./test"
+	viper.Set("SEC_RULES.DOWNLOADED_PATH", "./test/rules/downloaded")
+	viper.Set("SEC_RULES.RECOMMENDED", false)
+	viper.Set("SEC_RULES.OWASP", false)
+	config := configs.ParseConfig(configPath, viper)
 
 	waf, err := NewWafWrapper(registry)
 	if err != nil {
 		log.Fatal().Err(err).Msg("error while initializing seclang parser")
 	}
 
-	return NewServer(waf, registry)
-	//err = server.Start()
-	//if err != nil {
-	//	log.Fatal().Err(err).Msgf("An error occurred while starting bouncer")
-	//}
+	err = fetchAndParseSecRules(config, waf)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error while fetching configuration file(s)")
+	}
+
+	return NewServer(waf, registry, config.HealthzRoute)
 }
 
 func TestPing(t *testing.T) {
-	server := mainTest()
+	server := mainTest(viper.New())
 
 	w := httptest.NewRecorder()
 
@@ -59,7 +63,7 @@ func TestPing(t *testing.T) {
 }
 
 func TestHealthz(t *testing.T) {
-	router := mainTest().router
+	router := mainTest(viper.New()).router
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/healthz", nil)
@@ -69,7 +73,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestMetrics(t *testing.T) {
-	router := mainTest().router
+	router := mainTest(viper.New()).router
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/metrics", nil)
@@ -84,7 +88,7 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestForwardAuth(t *testing.T) {
-	router := mainTest().router
+	router := mainTest(viper.New()).router
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
@@ -97,11 +101,11 @@ func TestForwardAuth(t *testing.T) {
 }
 
 func TestCustomRules(t *testing.T) {
-	router := mainTest().router
+	viperConfig := viper.New()
+	viperConfig.Set("SEC_RULES.CUSTOM_RULE", "SecRule REMOTE_ADDR \"@rx 2.2.2.2\" \"id:1,phase:1,deny,status:403\"")
+	router := mainTest(viperConfig).router
 	w := httptest.NewRecorder()
 
-	configs.Values.SecRules.CustomRule = "SecRule REMOTE_ADDR \"@rx 2.2.2.2\" \"id:1,phase:1,deny,status:403\""
-	//ParseSecRules()
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
 	req.Header.Add("X-Real-Ip", "2.2.2.2")
 	req.Header.Add("X-Forwarded-Host", "127.0.0.1")
@@ -112,10 +116,10 @@ func TestCustomRules(t *testing.T) {
 }
 
 func TestForwardAuthBouncerSecRulesPath(t *testing.T) {
-	router := mainTest().router
+	router := mainTest(viper.New()).router
 	w := httptest.NewRecorder()
 
-	configs.Values.SecRules.CustomPath = "./test/rules/custom/*"
+	//configs.Values.SecRules.CustomPath = "./test/rules/custom/*"
 	//ParseSecRules()
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
 	req.Header.Add("X-Real-Ip", "3.3.3.3")

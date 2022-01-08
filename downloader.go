@@ -16,53 +16,59 @@ import (
 	"strings"
 )
 
-var (
-	downloadedRulesDir       = configs.Values.SecRules.DownloadedPath
-	coreRulesetUrl           = configs.Values.SecRules.OwaspUrl
-	corazaConfUrl            = configs.Values.SecRules.RecommendedUrl
-	owaspConfExampleFileName = configs.Values.SecRules.OwaspUrlExampleFile
-	owaspSha                 = configs.Values.SecRules.OwaspSha
+type Downloader struct {
+	coreRulesetArchivePath string
+	corazaConfPath         string
+	owaspConfExamplePath   string
 
-	coreRulesetArchivePath = filepath.Join(os.TempDir(), "coreruleset.tar.gz")
-	CorazaConfPath         = filepath.Join(downloadedRulesDir, "coraza.conf")
-	OwaspConfExamplePath   = filepath.Join(downloadedRulesDir, owaspConfExampleFileName)
-)
-
-func DownloadCorazaRecommendation() bool {
-	return downloadUrlFile(corazaConfUrl, CorazaConfPath)
+	config configs.SecRules
 }
 
-func DownloadOwaspCoreRules() bool {
-	success := downloadUrlFile(coreRulesetUrl, coreRulesetArchivePath)
+func NewDownloader(config configs.SecRules) (dl *Downloader, err error) {
+	dl = &Downloader{config: config}
+
+	dl.coreRulesetArchivePath = filepath.Join(os.TempDir(), "coreruleset.tar.gz")
+	dl.corazaConfPath = filepath.Join(config.DownloadedPath, "coraza.conf")
+	dl.owaspConfExamplePath = filepath.Join(config.DownloadedPath, config.OwaspUrlExampleFile)
+
+	return
+}
+
+func (dl Downloader) DownloadCorazaRecommendation() bool {
+	return downloadUrlFile(dl.config.RecommendedUrl, dl.corazaConfPath)
+}
+
+func (dl Downloader) DownloadOwaspCoreRules() bool {
+	success := downloadUrlFile(dl.config.OwaspUrl, dl.coreRulesetArchivePath)
 	if !success {
 		return false
 	}
-	defer os.Remove(coreRulesetArchivePath)
+	defer os.Remove(dl.coreRulesetArchivePath)
 
 	// Verify archive SHA1
-	if owaspSha != "" {
+	if dl.config.OwaspSha != "" {
 		hash := sha1.New()
-		bytes, _ := os.ReadFile(coreRulesetArchivePath)
+		bytes, _ := os.ReadFile(dl.coreRulesetArchivePath)
 		if _, err := hash.Write(bytes); err != nil {
 			log.Fatal().Err(err).Msg("Error while computing SHA of core ruleset archive")
 		}
 		obtainedSha := hex.EncodeToString(hash.Sum(nil))
-		if owaspSha != obtainedSha {
-			log.Fatal().Msgf("Expected SHA of core ruleset archive different to obtained value: %s vs %s", owaspSha, obtainedSha)
+		if dl.config.OwaspSha != obtainedSha {
+			log.Fatal().Msgf("Expected SHA of core ruleset archive different to obtained value: %s vs %s", dl.config.OwaspSha, obtainedSha)
 		} else {
 			log.Info().Msgf("Downloaded archive SHA is valid, obtained %s", obtainedSha)
 		}
 	}
 
-	file, err := os.Open(coreRulesetArchivePath)
+	file, err := os.Open(dl.coreRulesetArchivePath)
 	if err != nil {
-		log.Warn().Err(err).Msgf("Error while open core ruleset archive at path %s", coreRulesetArchivePath)
+		log.Warn().Err(err).Msgf("Error while open core ruleset archive at path %s", dl.coreRulesetArchivePath)
 		return false
 	}
 
 	archive, err := gzip.NewReader(file)
 	if err != nil {
-		log.Warn().Err(err).Msgf("Error while opening a reader for core ruleset archive at path %s", coreRulesetArchivePath)
+		log.Warn().Err(err).Msgf("Error while opening a reader for core ruleset archive at path %s", dl.coreRulesetArchivePath)
 		return false
 	}
 
@@ -78,12 +84,12 @@ func DownloadOwaspCoreRules() bool {
 		// Select only target files
 		if (!strings.Contains(archiveFile.Name, "/rules/") ||
 			archiveFile.FileInfo().IsDir()) &&
-			archiveFile.FileInfo().Name() != owaspConfExampleFileName {
+			archiveFile.FileInfo().Name() != dl.config.OwaspUrlExampleFile {
 			continue
 		}
 
 		// Checking if owasp folder exist and creating it if needed
-		sourceDir := filepath.Join(downloadedRulesDir, "owasp")
+		sourceDir := filepath.Join(dl.config.DownloadedPath, "owasp")
 		_, err = os.Stat(sourceDir)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -98,10 +104,10 @@ func DownloadOwaspCoreRules() bool {
 		}
 
 		// Creating an empty ruleset file
-		filePath := filepath.Join(downloadedRulesDir, "owasp", archiveFile.FileInfo().Name())
+		filePath := filepath.Join(dl.config.DownloadedPath, "owasp", archiveFile.FileInfo().Name())
 		// Special path for OWASP conf example
-		if archiveFile.FileInfo().Name() == owaspConfExampleFileName {
-			filePath = OwaspConfExamplePath
+		if archiveFile.FileInfo().Name() == dl.config.OwaspUrlExampleFile {
+			filePath = dl.owaspConfExamplePath
 		}
 		file, err := os.Create(filePath)
 		if err != nil {
