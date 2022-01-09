@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/fbonalair/traefik-coraza-bouncer/configs"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
@@ -12,6 +12,7 @@ import (
 )
 
 func main() {
+	setupLogger()
 	configPath := os.Getenv("BOUNCER_CONFIG_PATH")
 	if configPath == "" {
 		configPath = "/etc/bouncer/"
@@ -26,9 +27,8 @@ func main() {
 }
 
 func CreateRouter(configPath string, viper *viper.Viper) *Server {
-	setupLogger()
 	registry := prometheus.NewRegistry()
-	config := configs.ParseConfig(configPath, viper)
+	config := ParseConfig(configPath, viper)
 
 	waf, err := NewWafWrapper(registry)
 	if err != nil {
@@ -40,8 +40,7 @@ func CreateRouter(configPath string, viper *viper.Viper) *Server {
 		log.Fatal().Err(err).Msg("error while fetching configuration file(s)")
 	}
 
-	router := NewServer(waf, registry, config.HealthzRoute)
-	return router
+	return NewServer(waf, registry, config.HealthzRoute)
 }
 
 func setupLogger() {
@@ -59,39 +58,43 @@ func setupLogger() {
 	}
 }
 
-func fetchAndParseSecRules(config configs.Config, waf *WafWrapper) (err error) {
+func fetchAndParseSecRules(config Config, waf *WafWrapper) error {
 	var dl *Downloader
 	if config.Recommended || config.Owasp {
-		dl, err = NewDownloader(config.SecRules)
+		dl = NewDownloader(config.SecRules)
 	}
 	// Fetching and adding coraza recommended configuration
 	if config.Recommended {
-		success := dl.DownloadCorazaRecommendation()
-		if !success {
-			log.Fatal().Msgf("Server failed to download recommended Coraza configuration")
+		err := dl.DownloadCorazaRecommendation()
+		if err != nil {
+			return fmt.Errorf("server failed to download recommended Coraza configuration: %s", err.Error())
 		}
 		if err := waf.parseRulesFromFile(dl.corazaConfPath); err != nil {
-			log.Fatal().Err(err).Msgf("Error loading Coraza recommended configuration")
+			return fmt.Errorf("server failed to load recommended Coraza configuration: %s", err.Error())
 		}
 	}
 
 	// Fetching and parsing OWASP core Ruleset
 	if config.Owasp {
-		success := dl.DownloadOwaspCoreRules()
-		if !success {
-			log.Fatal().Msgf("Server failed to download OWASP rulesec")
+		owaspDlDir, err := dl.DownloadOwaspCoreRules()
+		if err != nil {
+			return fmt.Errorf("server failed to download OWASP rulesec: %s", err.Error())
 		}
-		owaspPath := filepath.Join(config.DownloadedPath, "*.conf")
-		if initErr := waf.parseRulesFromFile(owaspPath); initErr != nil {
-			log.Fatal().Err(initErr).Msgf("error while loading Owasp core ruleset")
+		owaspExampleFile := filepath.Join(config.DownloadedPath, config.OwaspUrlExampleFile)
+		if err := waf.parseRulesFromFile(owaspExampleFile); err != nil {
+			return fmt.Errorf("server failed to load OWASP example rulesec file: %s", err.Error())
+		}
+		owaspPath := filepath.Join(owaspDlDir, "*.conf")
+		if err := waf.parseRulesFromFile(owaspPath); err != nil {
+			return fmt.Errorf("server failed to load OWASP rulesec: %s", err.Error())
 		}
 	}
 	// Now we parse our custom rules
-	if initErr := waf.parseRulesFromString(config.CustomRule); initErr != nil {
-		log.Fatal().Err(initErr).Msgf("error while parsing rule %s", config.CustomRule)
+	if err := waf.parseRulesFromString(config.CustomRule); err != nil {
+		return fmt.Errorf("server failed to parse custom rulesec %s: %s", config.CustomRule, err.Error())
 	}
-	if initErr := waf.parseRulesFromFile(config.CustomPath); initErr != nil {
-		log.Fatal().Err(initErr).Msgf("error while parsing rule(s) from rule file/directory %s", config.CustomPath)
+	if err := waf.parseRulesFromFile(config.CustomPath); err != nil {
+		return fmt.Errorf("server failed to parse rule(s) from rule file/directory %s : %s", config.CustomPath, err.Error())
 	}
-	return
+	return nil
 }

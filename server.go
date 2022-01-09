@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/fbonalair/traefik-coraza-bouncer/configs"
 	"github.com/gin-contrib/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,7 +19,7 @@ type Server struct {
 		registry         *prometheus.Registry
 		requestProcessed prometheus.Counter
 	}
-	config configs.HealthzRoute
+	config HealthzRoute
 }
 
 const (
@@ -29,7 +28,7 @@ const (
 	clientPortHeader = "X-Forwarded-Port"
 )
 
-func NewServer(waf *WafWrapper, registry *prometheus.Registry, config configs.HealthzRoute) (server *Server) {
+func NewServer(waf *WafWrapper, registry *prometheus.Registry, config HealthzRoute) (server *Server) {
 	server = &Server{
 		waf:    waf,
 		config: config,

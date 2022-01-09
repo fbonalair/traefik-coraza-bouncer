@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/jptosso/coraza-waf/v2"
 	"github.com/jptosso/coraza-waf/v2/seclang"
 	"github.com/jptosso/coraza-waf/v2/types"
@@ -56,22 +57,20 @@ func NewWafWrapper(registry *prometheus.Registry) (wrapper *WafWrapper, err erro
 	return
 }
 
-func (waf WafWrapper) parseRulesFromString(value string) (err error) {
-	if err = waf.parser.FromString(value); err != nil {
-		log.Fatal().Err(err).Msgf("error while parsing rule(s) from value %s", value)
-		return
+func (waf WafWrapper) parseRulesFromString(value string) error {
+	if err := waf.parser.FromString(value); err != nil {
+		return fmt.Errorf("error while parsing rule(s) from value %s : %s", value, err.Error())
 	}
 	waf.Metrics.SecrulesAmount.Set(float64(waf.waf.Rules.Count()))
-	return
+	return nil
 }
 
-func (waf WafWrapper) parseRulesFromFile(path string) (err error) {
-	if err = waf.parser.FromFile(path); err != nil {
-		log.Fatal().Err(err).Msg("error while parsing rule(s) from rule file/directory")
-		return
+func (waf WafWrapper) parseRulesFromFile(path string) error {
+	if err := waf.parser.FromFile(path); err != nil {
+		return fmt.Errorf("error while parsing rule(s) from rule file/directory : %s", err.Error())
 	}
 	waf.Metrics.SecrulesAmount.Set(float64(waf.waf.Rules.Count()))
-	return
+	return nil
 }
 
 func (waf WafWrapper) ProcessRequest(request RequestProperties) (it *types.Interruption) {

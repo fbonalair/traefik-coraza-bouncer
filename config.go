@@ -1,8 +1,9 @@
-package configs
+package main
 
 import (
 	"github.com/rs/zerolog/log"
 	. "github.com/spf13/viper"
+	"os"
 )
 
 type SecRules struct {
@@ -37,7 +38,7 @@ func ParseConfig(configPath string, viper *Viper) (config Config) {
 	viper.AddConfigPath(configPath)
 
 	viper.SetDefault("SEC_RULES.CUSTOM_PATH", "/etc/bouncer/rules/custom/*")
-	viper.SetDefault("SEC_RULES.DOWNLOADED_PATH", "/etc/bouncer/rules/downloaded")
+	viper.SetDefault("SEC_RULES.DOWNLOADED_PATH", "/etc/bouncer/rules/downloaded/")
 	viper.SetDefault("SEC_RULES.RECOMMENDED", true)
 	viper.SetDefault("SEC_RULES.RECOMMENDED_URL", "https://raw.githubusercontent.com/jptosso/coraza-waf/v2/master/coraza.conf-recommended")
 	viper.SetDefault("SEC_RULES.OWASP", true)
@@ -55,6 +56,10 @@ func ParseConfig(configPath string, viper *Viper) (config Config) {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(ConfigFileNotFoundError); ok {
 			// Writing Config file if not found
+			err = os.MkdirAll(configPath, 0755)
+			if err != nil {
+				log.Fatal().Err(err).Msgf("error while accessing dir %s", configPath)
+			}
 			err := viper.SafeWriteConfig()
 			if err != nil {
 				log.Fatal().Err(err).Msg("Could not save Config file")

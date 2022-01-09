@@ -5,11 +5,9 @@ import (
 	"compress/gzip"
 	"crypto/sha1"
 	"encoding/hex"
-	"errors"
-	"github.com/fbonalair/traefik-coraza-bouncer/configs"
+	"fmt"
 	"github.com/rs/zerolog/log"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,10 +19,10 @@ type Downloader struct {
 	corazaConfPath         string
 	owaspConfExamplePath   string
 
-	config configs.SecRules
+	config SecRules
 }
 
-func NewDownloader(config configs.SecRules) (dl *Downloader, err error) {
+func NewDownloader(config SecRules) (dl *Downloader) {
 	dl = &Downloader{config: config}
 
 	dl.coreRulesetArchivePath = filepath.Join(os.TempDir(), "coreruleset.tar.gz")
@@ -34,52 +32,48 @@ func NewDownloader(config configs.SecRules) (dl *Downloader, err error) {
 	return
 }
 
-func (dl Downloader) DownloadCorazaRecommendation() bool {
+func (dl Downloader) DownloadCorazaRecommendation() error {
 	return downloadUrlFile(dl.config.RecommendedUrl, dl.corazaConfPath)
 }
 
-func (dl Downloader) DownloadOwaspCoreRules() bool {
-	success := downloadUrlFile(dl.config.OwaspUrl, dl.coreRulesetArchivePath)
-	if !success {
-		return false
+func (dl Downloader) DownloadOwaspCoreRules() (string, error) {
+	err := downloadUrlFile(dl.config.OwaspUrl, dl.coreRulesetArchivePath)
+	if err != nil {
+		return "", err
 	}
 	defer os.Remove(dl.coreRulesetArchivePath)
 
 	// Verify archive SHA1
 	if dl.config.OwaspSha != "" {
-		hash := sha1.New()
-		bytes, _ := os.ReadFile(dl.coreRulesetArchivePath)
-		if _, err := hash.Write(bytes); err != nil {
-			log.Fatal().Err(err).Msg("Error while computing SHA of core ruleset archive")
-		}
-		obtainedSha := hex.EncodeToString(hash.Sum(nil))
-		if dl.config.OwaspSha != obtainedSha {
-			log.Fatal().Msgf("Expected SHA of core ruleset archive different to obtained value: %s vs %s", dl.config.OwaspSha, obtainedSha)
-		} else {
-			log.Info().Msgf("Downloaded archive SHA is valid, obtained %s", obtainedSha)
+		err := verifyArchiveSha(dl.coreRulesetArchivePath, dl.config.OwaspSha)
+		if err != nil {
+			return "", err
 		}
 	}
 
+	// Opening archive file
 	file, err := os.Open(dl.coreRulesetArchivePath)
 	if err != nil {
-		log.Warn().Err(err).Msgf("Error while open core ruleset archive at path %s", dl.coreRulesetArchivePath)
-		return false
+		return "", fmt.Errorf("error while open core ruleset archive at path %s : %s", dl.coreRulesetArchivePath, err.Error())
 	}
-
 	archive, err := gzip.NewReader(file)
 	if err != nil {
-		log.Warn().Err(err).Msgf("Error while opening a reader for core ruleset archive at path %s", dl.coreRulesetArchivePath)
-		return false
+		return "", fmt.Errorf("error while opening a reader for core ruleset archive at path %s : %s", dl.coreRulesetArchivePath, err.Error())
 	}
 
 	tr := tar.NewReader(archive)
+	return extractRuleFiles(tr, file, dl)
+}
+
+func extractRuleFiles(tr *tar.Reader, file *os.File, dl Downloader) (string, error) {
+	sourceDir := filepath.Join(dl.config.DownloadedPath, "owasp")
 	for {
 		archiveFile, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			log.Warn().Err(err).Msgf("Error trying to get next file in archive %s", file.Name())
+			return "", fmt.Errorf("error trying to get next file in archive %s : %s", file.Name(), err.Error())
 		}
 		// Select only target files
 		if (!strings.Contains(archiveFile.Name, "/rules/") ||
@@ -89,18 +83,9 @@ func (dl Downloader) DownloadOwaspCoreRules() bool {
 		}
 
 		// Checking if owasp folder exist and creating it if needed
-		sourceDir := filepath.Join(dl.config.DownloadedPath, "owasp")
-		_, err = os.Stat(sourceDir)
+		err = os.MkdirAll(sourceDir, 0755)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				subErr := os.MkdirAll(sourceDir, 0755)
-				if subErr != nil {
-					log.Warn().Err(subErr).Msgf("Error while creating coraza configuration target directory %s", sourceDir)
-					return false
-				}
-			} else {
-				log.Warn().Err(err).Msgf("Error while accessing coraza configuration target directory %s", sourceDir)
-			}
+			return "", fmt.Errorf("error while accessing dir %s : %s", sourceDir, err.Error())
 		}
 
 		// Creating an empty ruleset file
@@ -111,22 +96,41 @@ func (dl Downloader) DownloadOwaspCoreRules() bool {
 		}
 		file, err := os.Create(filePath)
 		if err != nil {
-			log.Warn().Err(err).Msgf("Error while creating file at %s", filePath)
-			return false
+			return "", fmt.Errorf("error while creating file at %s : %s", filePath, err.Error())
 		}
 
 		// Put content in file
 		size, err := io.Copy(file, tr)
+		if err != nil {
+			return "", fmt.Errorf("error while copying file %s to %s : %s", file.Name(), filePath, err.Error())
+		}
 		log.Debug().Msgf("Successfully written file %s of %d bytes", file.Name(), size)
-		file.Close()
+		err = file.Close()
+		if err != nil {
+			return "", fmt.Errorf("error while closing file %s from path %s : %s", file.Name(), filePath, err.Error())
+		}
 	}
-	return true
+	return sourceDir, nil
+}
+
+func verifyArchiveSha(coreRulesetArchivePath, owaspSha string) error {
+	hash := sha1.New()
+	bytes, _ := os.ReadFile(coreRulesetArchivePath)
+	if _, err := hash.Write(bytes); err != nil {
+		return fmt.Errorf("error while computing SHA of core ruleset archive : %s", err.Error())
+	}
+	obtainedSha := hex.EncodeToString(hash.Sum(nil))
+	if owaspSha != obtainedSha {
+		return fmt.Errorf("expected SHA of core ruleset archive different to obtained value: %s vs %s", owaspSha, obtainedSha)
+	}
+	log.Info().Msgf("Downloaded archive SHA is valid, obtained %s", obtainedSha)
+	return nil
 }
 
 /*
 Download the file at the target Url to the local path
 */
-func downloadUrlFile(targetUrl string, targetPath string) bool {
+func downloadUrlFile(targetUrl string, targetPath string) error {
 	// Setup http client
 	client := http.Client{
 		CheckRedirect: func(r *http.Request, via []*http.Request) error {
@@ -137,44 +141,33 @@ func downloadUrlFile(targetUrl string, targetPath string) bool {
 	// Get data
 	resp, err := client.Get(targetUrl)
 	if err != nil {
-		log.Warn().Err(err).Msgf("Error while getting file from url %s", targetUrl)
-		return false
+		return fmt.Errorf("error while getting file from url %s : %s", targetUrl, err.Error())
 	}
 	if resp.StatusCode != 200 {
-		log.Warn().Msgf("Received non 200 response code while fetching file from url %s", targetUrl)
-		return false
+		return fmt.Errorf("received non 200 response code while fetching file from url %s", targetUrl)
 	}
 	defer resp.Body.Close()
 
 	// Checking if target file directory exist and creating it if needed
 	lastSlash := strings.LastIndexByte(targetPath, '/')
 	sourceDir := targetPath[0:lastSlash]
-	_, err = os.Stat(sourceDir)
+	err = os.MkdirAll(sourceDir, 0755)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			subErr := os.MkdirAll(sourceDir, 0755)
-			if subErr != nil {
-				log.Warn().Err(subErr).Msgf("Error while creating coraza configuration target directory %s", sourceDir)
-				return false
-			}
-		} else {
-			log.Warn().Err(err).Msgf("Error while accessing coraza configuration target directory %s", sourceDir)
-		}
+		return fmt.Errorf("error while accessing dir %s : %s", sourceDir, err.Error())
 	}
 
 	// Create blank file
 	file, err := os.Create(targetPath)
 	if err != nil {
-		log.Warn().Err(err).Msgf("Error while creating file at %s", targetPath)
-		return false
+		return fmt.Errorf("error while creating file at %s : %s", targetPath, err.Error())
 	}
 	// Put content on file
 	_, err = io.Copy(file, resp.Body)
 	defer file.Close()
 	if err != nil {
-		log.Warn().Err(err).Msgf("Error while writing downloaded file %s at %s", targetUrl, targetPath)
+		return fmt.Errorf("error while writing downloaded file %s at %s : %s", targetUrl, targetPath, err.Error())
 	}
 
 	log.Info().Msgf("Successfully download %s to %s ", targetUrl, targetPath)
-	return true
+	return nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/spf13/viper"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,7 +20,12 @@ func TestMain(m *testing.M) {
 
 func beforeEach() {}
 
-func afterEach() {}
+func afterEach() {
+	err := os.RemoveAll("./test/rules/downloaded")
+	if err != nil {
+		log.Println("Error while cleaning rules download path")
+	}
+}
 
 func TestPing(t *testing.T) {
 	router := CreateRouter("./test", viper.New()).router
