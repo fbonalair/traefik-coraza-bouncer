@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	_ "github.com/jptosso/coraza-libinjection"
+	_ "github.com/jptosso/coraza-pcre"
 	"github.com/jptosso/coraza-waf/v2"
 	"github.com/jptosso/coraza-waf/v2/seclang"
 	"github.com/jptosso/coraza-waf/v2/types"
@@ -32,9 +34,7 @@ type RequestProperties struct {
 	Headers    http.Header
 }
 
-/**
-Initialize coraza module
-*/
+// NewWafWrapper Initialize coraza module
 func NewWafWrapper(registry *prometheus.Registry) (wrapper *WafWrapper, err error) {
 	wrapper = &WafWrapper{}
 	// First we initialize our waf and our seclang parser

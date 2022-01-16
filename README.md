@@ -61,7 +61,23 @@ The webservice exposes some routes:
 # Contribution
 Feel free to leave an issue if you found a bug or need a new feature.
 TODO:
-- Communication with crowdsec?
+- Communication with crowdsec: Hosting syslog server to send mod security log
+  - suggested communication https://discourse.crowdsec.net/t/communication-between-crowdsec-and-a-waf/517
+  - syslog server with https://github.com/mcuadros/go-syslog
 
 ## Local development
+Assuming Linux, follow those command to build the needed C bindings:
+```
+  git clone https://github.com/libinjection/libinjection
+  gcc -std=c99 -Wall -Werror -fpic -c libinjection/src/libinjection_sqli.c -o libinjection/libinjection_sqli.o
+  gcc -std=c99 -Wall -Werror -fpic -c libinjection/src/libinjection_xss.c -o libinjection/libinjection_xss.o
+  gcc -std=c99 -Wall -Werror -fpic -c libinjection/src/libinjection_html5.c -o libinjection/libinjection_html5.o
+  gcc -dynamiclib -shared -o libinjection/libinjection.so libinjection/libinjection_sqli.o libinjection/libinjection_xss.o libinjection/libinjection_html5.o
+  sudo cp libinjection/*.so /usr/local/lib
+  sudo cp libinjection/*.o /usr/local/lib
+  sudo cp libinjection/src/*.h /usr/local/include/
+  sudo chmod 444 /usr/local/include/libinjection*
+  sudo ldconfig
+```
+You might also need libpcre-devel: `sudo apt install libpcre++-dev -y` depending on your distro.   
 You should set your environment var `CONFIG_PATH` to the absolute path of file `configs/config.yaml`
