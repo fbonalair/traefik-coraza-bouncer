@@ -31,7 +31,7 @@ type RequestProperties struct {
 	ClientPort int
 	ServerIp   string
 	ServerPort int
-	Headers    http.Header
+	Request    *http.Request
 }
 
 // NewWafWrapper Initialize coraza module
@@ -73,24 +73,23 @@ func (waf WafWrapper) parseRulesFromFile(path string) error {
 	return nil
 }
 
-func (waf WafWrapper) ProcessRequest(request RequestProperties) (it *types.Interruption) {
+func (waf WafWrapper) ProcessRequest(request RequestProperties) (it *types.Interruption, err error) {
+	method := request.Request.Header.Get("X-Forwarded-Method")
+	uri := request.Request.Header.Get("X-Forwarded-Uri")
+	proto := "HTTP/1.1"
+
 	// We create a transaction and assign some variables
 	tx := waf.waf.NewTransaction()
 	defer func() {
 		// A transaction must be logged and taken back to the sync pool
 		tx.ProcessLogging()
-		tx.Clean()
+		err := tx.Clean()
+		if err != nil {
+			log.Warn().Err(err).Msgf("Error while cleaning up after transaction %q", tx.ID)
+		}
 	}()
 	tx.ProcessConnection(request.ClientIp, request.ServerPort, request.ServerIp, request.ServerPort)
-
-	// Adding request headers
-	// Loop over header names
-	for name, values := range request.Headers {
-		// Loop over all values for the name.
-		for _, value := range values {
-			tx.AddRequestHeader(name, value)
-		}
-	}
+	tx.ProcessURI(uri, method, proto)
 
 	// Finally, we process the request headers phase, which may return an interruption
 	it = tx.ProcessRequestHeaders()
@@ -102,7 +101,28 @@ func (waf WafWrapper) ProcessRequest(request RequestProperties) (it *types.Inter
 			Str("Data", it.Data).
 			Msgf("Transaction %q from request X was interrupted", tx.ID)
 	} else {
-		log.Debug().Msgf("Transaction %q from request X passed without interrupt", tx.ID)
+		log.Debug().Msgf("Transaction %q passed request header without interrupt", tx.ID)
 	}
+
+	it, err = tx.ProcessRequest(request.Request)
+	if err != nil {
+		return
+	}
+	if it != nil {
+		waf.Metrics.RequestInterrupted.Inc()
+		log.Info().Int("RuleID", it.RuleID).
+			Str("Action", it.Action).
+			Int("Status", it.Status).
+			Str("Data", it.Data).
+			Msgf("Transaction %q from request was interrupted", tx.ID)
+
+		if it.Status < 199 {
+			log.Warn().Msgf("Interrupt recommended status %d < 299, defaulting to 403", it.Status)
+			it.Status = 403
+		}
+	} else {
+		log.Debug().Msgf("Transaction %q passed request without interrupt", tx.ID)
+	}
+
 	return
 }

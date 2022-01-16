@@ -70,7 +70,8 @@ func TestForwardAuth(t *testing.T) {
 	t.Run("Custom rules", FACustomRule)
 	t.Run("Custom path rules", FABouncerSecRulesPath)
 	t.Run("Coraza recommended", FACorazaRecommended)
-	t.Run("OWASP recommended", FAOwaspRecommended)
+	t.Run("OWASP recommended passing", FAOwaspRecommendedPassing)
+	t.Run("OWASP recommended forbidden", FAOwaspRecommendedForbidden)
 }
 
 func simpleRequest(t *testing.T) {
@@ -86,7 +87,6 @@ func simpleRequest(t *testing.T) {
 
 	assert.Equal(t, 200, w.Code)
 	assert.Equal(t, server.waf.waf.Rules.Count(), 0)
-
 }
 
 func FACustomRule(t *testing.T) {
@@ -135,7 +135,7 @@ func FACorazaRecommended(t *testing.T) {
 	assert.Greater(t, server.waf.waf.Rules.Count(), 0)
 }
 
-func FAOwaspRecommended(t *testing.T) {
+func FAOwaspRecommendedPassing(t *testing.T) {
 	viperConfig := viper.New()
 	viperConfig.Set("SEC_RULES.OWASP", true)
 	viperConfig.Set("SEC_RULES.OWASP_SHA", "63aa8ee3f3c9cb23f5639dd235bac1fa1bc64264")
@@ -143,11 +143,29 @@ func FAOwaspRecommended(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
-	req.Header.Add("X-Real-Ip", "2.2.2.2")
+	req.Header.Add("X-Real-Ip", "5.5.5.5")
 	req.Header.Add("X-Forwarded-Host", "127.0.0.1")
 	req.Header.Add("X-Forwarded-Port", "8080")
 	server.router.ServeHTTP(w, req)
 
 	assert.Equal(t, 200, w.Code)
 	assert.Greater(t, server.waf.waf.Rules.Count(), 0)
+}
+
+func FAOwaspRecommendedForbidden(t *testing.T) {
+	viperConfig := viper.New()
+	viperConfig.Set("SEC_RULES.OWASP", true)
+	viperConfig.Set("SEC_RULES.OWASP_SHA", "63aa8ee3f3c9cb23f5639dd235bac1fa1bc64264")
+	server := CreateRouter("./test", viperConfig)
+	w := httptest.NewRecorder()
+
+	req, _ := http.NewRequest("GET", "/api/v1/forwardAuth", nil)
+	req.Header.Add("X-Real-Ip", "6.6.6.6")
+	req.Header.Add("X-Forwarded-Host", "127.0.0.1")
+	req.Header.Add("X-Forwarded-Port", "8080")
+	req.Header.Add("X-Forwarded-Uri", "/index.html?exec=/bin/bash")
+	server.router.ServeHTTP(w, req)
+
+	assert.Greater(t, server.waf.waf.Rules.Count(), 0)
+	assert.NotEqual(t, 200, w.Code)
 }

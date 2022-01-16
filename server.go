@@ -79,13 +79,15 @@ func (server *Server) forwardAuth(c *gin.Context) {
 		ClientPort: server.config.ClientPort, // FIXME use a different property
 		ServerIp:   c.Request.Header.Get(serverHostHeader),
 		ServerPort: serverPort,
-		Headers:    c.Request.Header.Clone(),
+		Request:    c.Request,
 	}
-	request.Headers.Del(clientIpHeader)
-	request.Headers.Del(clientPortHeader)
-	request.Headers.Del(serverHostHeader)
 
-	interrupt := server.waf.ProcessRequest(request)
+	interrupt, err := server.waf.ProcessRequest(request)
+	if err != nil {
+		log.Warn().Err(err).Msg("Error while processing request with WAF")
+		c.Status(http.StatusInternalServerError)
+		return
+	}
 	if interrupt != nil {
 		c.String(interrupt.Status, "")
 	} else {
@@ -102,8 +104,15 @@ func (server *Server) healthz(c *gin.Context) {
 		ClientPort: server.config.ClientPort,
 		ServerIp:   server.config.ServerIp,
 		ServerPort: server.config.ServerPort,
+		Request:    c.Request,
 	}
-	interrupt := server.waf.ProcessRequest(request)
+
+	interrupt, err := server.waf.ProcessRequest(request)
+	if err != nil {
+		log.Warn().Err(err).Msg("Error while processing request with WAF")
+		c.Status(http.StatusInternalServerError)
+		return
+	}
 	if interrupt != nil {
 		c.String(interrupt.Status, "")
 	} else {
