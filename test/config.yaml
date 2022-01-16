@@ -1,0 +1,4 @@
+SEC_RULES:
+  DOWNLOADED_PATH: "./test/rules/downloaded"
+  RECOMMENDED: "false"
+  OWASP: "false"
