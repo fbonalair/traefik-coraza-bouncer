@@ -116,7 +116,7 @@ func (waf WafWrapper) ProcessRequest(request RequestProperties) (it *types.Inter
 			Str("Data", it.Data).
 			Msgf("Transaction %q from request was interrupted", tx.ID)
 
-		if it.Status < 199 {
+		if it.Status < 299 {
 			log.Warn().Msgf("Interrupt recommended status %d < 299, defaulting to 403", it.Status)
 			it.Status = 403
 		}
