@@ -76,7 +76,11 @@ func (waf WafWrapper) parseRulesFromFile(path string) error {
 func (waf WafWrapper) ProcessRequest(request RequestProperties) (it *types.Interruption) {
 	// We create a transaction and assign some variables
 	tx := waf.waf.NewTransaction()
-	defer tx.ProcessLogging()
+	defer func() {
+		// A transaction must be logged and taken back to the sync pool
+		tx.ProcessLogging()
+		tx.Clean()
+	}()
 	tx.ProcessConnection(request.ClientIp, request.ServerPort, request.ServerIp, request.ServerPort)
 
 	// Adding request headers
